@@ -1,81 +1,144 @@
-function stableHash(input) {
-  const bytes = new TextEncoder().encode(input);
-  let h = 0x811c9dc5;
-  for (let i = 0; i < bytes.length; i += 1) {
-    h ^= bytes[i];
-    h = Math.imul(h, 0x01000193) >>> 0;
+// QuantumProof API Client - Connects to REAL FHE backend
+
+const API_BASE = 'http://localhost:5001/api';
+
+/**
+ * Check if FHE backend is available
+ */
+export async function checkStatus() {
+  try {
+    const response = await fetch(`${API_BASE}/status`);
+    if (!response.ok) throw new Error('Backend not available');
+    return await response.json();
+  } catch (error) {
+    console.error('Backend status check failed:', error);
+    throw new Error('Cannot connect to FHE backend. Make sure the API server is running.');
   }
-  return h.toString(16).padStart(8, '0');
 }
 
-function inputFingerprint(sensitiveInput) {
-  return stableHash(`fingerprint::${sensitiveInput}`);
-}
+/**
+ * Run REAL FHE computation on backend
+ */
+export async function runQuantumProof({ sensitiveInput, scenario, forceFallback }) {
+  try {
+    const response = await fetch(`${API_BASE}/compute`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sensitiveInput,
+        scenario,
+        forceFallback,
+      }),
+    });
 
-function simulatePrivateCompute(sensitiveInput, scenario, forceFallback) {
-  const mode = forceFallback ? 'fallback-deterministic' : 'simulated-private-compute';
-  const signal = parseInt(stableHash(sensitiveInput + scenario), 16) % 100;
-
-  return {
-    computeMode: mode,
-    result: {
-      riskReductionPercent: 20 + (signal % 61),
-      performanceOverheadPercent: 2 + (signal % 19),
-      recommendedRollout: 'phased'
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Computation failed');
     }
-  };
-}
 
-function generateProof(fingerprint, computeResult, scenario) {
-  const payload = JSON.stringify({ fingerprint, computeResult, scenario, circuitVersion: 'demo-circuit-v1' });
-  return stableHash(`proof::${payload}`);
-}
+    const data = await response.json();
 
-function verifyProof(proofHash, fingerprint, computeResult, scenario) {
-  return proofHash === generateProof(fingerprint, computeResult, scenario);
-}
+    if (!data.success) {
+      throw new Error(data.error || 'Computation failed');
+    }
 
-export function runQuantumProof({ sensitiveInput, scenario, forceFallback }) {
-  const started = performance.now();
-  const timestampUtc = new Date().toISOString();
-  const runId = `run-${stableHash(timestampUtc + scenario + sensitiveInput).slice(0, 8)}`;
+    // Transform backend response to match frontend format
+    const result = data.result;
 
-  const fingerprint = inputFingerprint(sensitiveInput);
-  const { computeMode, result } = simulatePrivateCompute(sensitiveInput, scenario, forceFallback);
-  const proofHash = generateProof(fingerprint, result, scenario);
-  const verificationResult = verifyProof(proofHash, fingerprint, result, scenario);
-  const runtimeMs = Math.max(1, Math.round(performance.now() - started));
-
-  if (!verificationResult) {
-    throw new Error('Proof verification failed. Output blocked by verification gate.');
+    return {
+      runId: result.run_id,
+      timestampUtc: result.timestamp_utc,
+      scenario: result.scenario,
+      riskContext: result.risk_context,
+      trustModelComparison: result.trust_model_comparison,
+      computeResult: {
+        riskReductionPercent: result.compute_result.risk_reduction_percent,
+        performanceOverheadPercent: result.compute_result.performance_overhead_percent,
+        recommendedRollout: result.compute_result.recommended_rollout,
+        fheEnabled: result.compute_result.fhe_enabled || false,
+        fheScheme: result.compute_result.fhe_scheme || 'N/A',
+      },
+      benchmark: {
+        runtimeMs: result.benchmark.runtime_ms,
+        computeMode: result.benchmark.compute_mode,
+        encryptionTimeMs: result.benchmark.encryption_time_ms,
+        computationTimeMs: result.benchmark.computation_time_ms,
+        proofTimeMs: result.benchmark.proof_time_ms,
+      },
+      proof: {
+        proofHash: result.proof.proof_hash,
+        verificationResult: result.proof.verification_result,
+        circuitVersion: result.proof.circuit_version,
+        inputFingerprint: result.proof.input_fingerprint,
+        cryptoPrimitivesUsed: result.proof.crypto_primitives_used || [],
+        fheParameters: result.proof.fhe_parameters || {},
+      },
+    };
+  } catch (error) {
+    console.error('FHE computation error:', error);
+    throw error;
   }
-
-  return {
-    runId,
-    timestampUtc,
-    scenario,
-    riskContext:
-      'This run demonstrates quantum-resilient workflow behavior by combining private computation signals and proof-backed verification.',
-    trustModelComparison:
-      'Traditional trust relies on operator process integrity; this model adds cryptographic verification and exportable audit metadata.',
-    computeResult: result,
-    benchmark: {
-      runtimeMs,
-      computeMode
-    },
-    proof: {
-      proofHash,
-      verificationResult,
-      circuitVersion: 'demo-circuit-v1',
-      inputFingerprint: fingerprint
-    }
-  };
 }
 
+/**
+ * Convert report to Markdown
+ */
 export function toMarkdown(report) {
-  return `# QuantumProof Ops Report\n\n- Run ID: \`${report.runId}\`\n- Timestamp (UTC): \`${report.timestampUtc}\`\n- Scenario: \`${report.scenario}\`\n- Verification: \`${report.proof.verificationResult}\`\n\n## Computation Result\n\n- Risk Reduction Estimate: \`${report.computeResult.riskReductionPercent}%\`\n- Performance Overhead Estimate: \`${report.computeResult.performanceOverheadPercent}%\`\n- Recommended Rollout: \`${report.computeResult.recommendedRollout}\`\n\n## Quantum-Risk Context\n\n${report.riskContext}\n\n## Trust Model Comparison\n\n${report.trustModelComparison}\n\n## Audit Bundle\n\n- Proof Hash: \`${report.proof.proofHash}\`\n- Circuit Version: \`${report.proof.circuitVersion}\`\n- Input Fingerprint: \`${report.proof.inputFingerprint}\`\n- Runtime (ms): \`${report.benchmark.runtimeMs}\`\n- Compute Mode: \`${report.benchmark.computeMode}\`\n`;
+  const primitivesList = (report.proof.cryptoPrimitivesUsed || [])
+    .map(p => `  - ${p}`)
+    .join('\n');
+
+  return `# QuantumProof Ops - FHE Computation Report
+
+## Run Metadata
+- **Run ID**: \`${report.runId}\`
+- **Timestamp**: \`${report.timestampUtc}\`
+- **Scenario**: \`${report.scenario}\`
+- **Verification**: \`${report.proof.verificationResult ? '✅ VERIFIED' : '❌ FAILED'}\`
+
+## Cryptographic Primitives
+${primitivesList}
+
+## FHE Parameters
+\`\`\`json
+${JSON.stringify(report.proof.fheParameters, null, 2)}
+\`\`\`
+
+## Results
+- **Risk Score**: \`${report.computeResult.riskReductionPercent}%\`
+- **FHE Overhead**: \`${report.computeResult.performanceOverheadPercent}%\`
+- **FHE Enabled**: \`${report.computeResult.fheEnabled}\`
+- **FHE Scheme**: \`${report.computeResult.fheScheme}\`
+
+## Performance
+- **Total Runtime**: \`${report.benchmark.runtimeMs}ms\`
+- **Encryption Time**: \`${report.benchmark.encryptionTimeMs}ms\`
+- **Computation Time**: \`${report.benchmark.computationTimeMs}ms\`
+- **Proof Generation**: \`${report.benchmark.proofTimeMs}ms\`
+
+## Quantum-Risk Context
+
+${report.riskContext}
+
+## Trust Model Comparison
+
+${report.trustModelComparison}
+
+## Audit Trail
+- **ZK Proof Hash**: \`${report.proof.proofHash}\`
+- **Input Fingerprint**: \`${report.proof.inputFingerprint}\`
+- **Circuit Version**: \`${report.proof.circuitVersion}\`
+
+---
+*Generated by QuantumProof Ops using REAL Microsoft SEAL FHE*
+`;
 }
 
+/**
+ * Download file to user's computer
+ */
 export function downloadFile(filename, content, type) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
