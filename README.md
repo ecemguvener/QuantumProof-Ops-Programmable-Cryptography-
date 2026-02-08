@@ -23,6 +23,26 @@ A demonstration of **programmable cryptography** that:
 pip install tenseal numpy
 ```
 
+### Run Backend + UI (Full Demo)
+Use two terminals from the repo root.
+
+**Terminal 1: Start backend API**
+```bash
+pip install -r requirements.txt
+python3 app/api.py
+```
+Backend runs at `http://localhost:5001`
+
+**Terminal 2: Start React UI**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+UI runs at `http://localhost:5173`
+
+Then open the UI, enter a sample input, and click **Run FHE Workflow**.
+
 ### Run with Real FHE
 ```bash
 python3 app/main.py run --input "credit-score-750" --scenario "loan-approval"
