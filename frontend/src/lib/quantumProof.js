@@ -1,6 +1,6 @@
 // QuantumProof API Client
 
-const API_BASE = 'http://localhost:5001/api';
+const API_BASE = (import.meta.env.VITE_API_URL || 'https://quantumproof-ops-programmable.onrender.com') + '/api';
 
 function normalizePrimitiveName(name) {
   if (!name) return name;
