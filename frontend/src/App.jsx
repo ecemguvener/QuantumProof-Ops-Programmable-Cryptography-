@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { downloadFile, runQuantumProof, toMarkdown, checkStatus, simulateQuantumAttack } from './lib/quantumProof';
 import CryptoParams from './components/CryptoParams';
 import BeforeAfter from './components/BeforeAfter';
@@ -576,6 +577,7 @@ export default function App() {
           </div>
         </footer>
       </main>
+      <Analytics />
     </div>
   );
 }
