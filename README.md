@@ -1,4 +1,4 @@
-### Built at ETH Oxford Hackathon 2026 — Top 3 Finalist
+### Built at ETH The University of Oxford Hackathon 2026 — Top 3 Finalist
 # QuantumProof Ops — Verifiable Compute on Encrypted Data (FHE + ZK) with Quantum-Aware Modes
 
 **QuantumProof Ops** is a hackathon-ready prototype showing how programmable cryptography can power sensitive decisions without exposing raw user credentials.
